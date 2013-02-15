@@ -2,7 +2,7 @@ from json import dump
 from time import time
 from uuid import uuid1
 from bz2 import BZ2File
-from itertools import count, izip
+from itertools import count, izip, groupby
 from optparse import OptionParser
 from multiprocessing import Pool
 
@@ -83,7 +83,7 @@ def cascaded_union(shapes):
     
     return cascaded_union([shapes1, shapes2])
 
-def relation_key(tags):
+def relation_key((id, tags)):
     '''
     '''
     return (tags.get('network', ''), tags.get('ref', ''), tags.get('modifier', ''))
@@ -176,36 +176,37 @@ def get_way_linestring(db, way_id):
 def gen_relation_groups(db, relations):
     '''
     '''
-    relation_keys = [relation_key(tags) for (id, tags) in relations]
+    relations.sort(key=relation_key)
     
-    group, coords, last_key = [], 0, None
+    group_list, group_coords = [], 0
     
-    for (key, (id, tags)) in sorted(zip(relation_keys, relations)):
+    for (key, _relations) in groupby(relations, relation_key):
+    
+        rel_coords, way_lines = 0, []
+        
+        for (id, tags) in _relations:
+            way_ids = get_relation_ways(db, id)
+            way_lines += [get_way_linestring(db, way_id) for way_id in way_ids]
+            rel_coords += sum([len(line.coords) for line in way_lines if line])
 
-        if coords > 100000 and key != last_key:
-            yield group
-            group, coords = [], 0
-        
-        way_ids = get_relation_ways(db, id)
-        way_lines = [get_way_linestring(db, way_id) for way_id in way_ids]
-        rel_coords = sum([len(line.coords) for line in way_lines if line])
-        multiline = cascaded_union(way_lines)
-        
         logging.debug('%s -- %d nodes' % (', '.join(key), rel_coords))
         
-        if multiline:
-            group.append((id, tags, multiline))
-            coords += rel_coords
-            last_key = key
-
-    yield group
+        group_list.append((id, tags, way_lines))
+        group_coords += rel_coords
+    
+        if group_coords > 100000:
+            yield group_list
+            group_list, group_coords = [], 0
+    
+    yield group_list
 
 def output_geojson_bzipped(index, routes):
     '''
     '''
     try:
         ids = [id for (id, t, g) in routes]
-        geometries = [geom.__geo_interface__ for (i, t, geom) in routes]
+        geometries = [cascaded_union(geoms) for (i, t, geoms) in routes]
+        geometries = [geom.__geo_interface__ for geom in geometries if geom]
         properties = [tags for (i, tags, g) in routes]
         
         features = [dict(type='Feature', id=id, properties=p, geometry=g)
@@ -223,7 +224,7 @@ def output_geojson_bzipped(index, routes):
 
 optparser = OptionParser(usage="""%prog [options] <database>""")
 
-defaults = dict(host='localhost', user='gis', passwd=None, table='planet_osm_rels', count=5000)
+defaults = dict(host='localhost', user='gis', passwd=None, table='planet_osm_rels', count=5000, loglevel=logging.INFO)
 
 optparser.set_defaults(**defaults)
 
@@ -239,11 +240,19 @@ optparser.add_option('-p', '--passwd', dest='passwd',
 optparser.add_option('-t', '--table', dest='table',
                      help='Osm2psql relations table name, default "%(table)s".' % defaults)
 
+optparser.add_option('-v', '--verbose', dest='loglevel',
+                     action='store_const', const=logging.DEBUG,
+                     help='Output extra progress information.')
+
+optparser.add_option('-q', '--quiet', dest='loglevel',
+                     action='store_const', const=logging.WARNING,
+                     help='Output no progress information.')
+
 if __name__ == '__main__':
 
     opts, (dbname, ) = optparser.parse_args()
     
-    logging.basicConfig(level=logging.DEBUG, format='%(levelname)08s - %(message)s')
+    logging.basicConfig(level=opts.loglevel, format='%(levelname)08s - %(message)s')
     
     db = connect(host=opts.host, database=dbname, user=opts.user, password=opts.passwd)
     db = db.cursor()
