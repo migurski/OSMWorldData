@@ -2,15 +2,16 @@ from json import dump
 from time import time
 from uuid import uuid1
 from bz2 import BZ2File
-from itertools import count, izip
+from itertools import count, izip, groupby
 from optparse import OptionParser
 from multiprocessing import Pool
 
 import logging
 
-from psycopg2 import connect
 from shapely.wkb import loads
+from shapely.geometry import MultiLineString
 from StreetNames import short_street_name
+from psycopg2 import connect, OperationalError
 
 def build_temporary_tables(db, opts):
     '''
@@ -33,29 +34,44 @@ def build_temporary_tables(db, opts):
     
     start = time()
     
+    # db.execute('''
+    #     CREATE TEMPORARY TABLE street_ids
+    #     AS SELECT streets.osm_id, streets.name, streets.kind
+    #     FROM masks,
+    #     (
+    #         SELECT way, osm_id, name,
+    # 
+    #                (CASE WHEN highway IN ('motorway') THEN 'highway'
+    #                      WHEN highway IN ('trunk', 'primary') THEN 'major_road'
+    #                      ELSE 'minor_road' END) AS kind
+    # 
+    #         FROM %s
+    #         WHERE name IS NOT NULL
+    #           AND (highway IN ('trunk', 'primary') OR
+    #                highway IN ('secondary'))
+    #     ) AS streets
+    #     
+    #     WHERE streets.way && masks.way
+    #     ''' % opts.table)
+    
     db.execute('''
         CREATE TEMPORARY TABLE street_ids
-        AS SELECT streets.osm_id, streets.name, streets.kind
-        FROM masks,
-        (
-            SELECT way, osm_id, name,
-    
-                   (CASE WHEN highway IN ('motorway') THEN 'highway'
-                         WHEN highway IN ('trunk', 'primary') THEN 'major_road'
-                         ELSE 'minor_road' END) AS kind
-    
-            FROM %s
-            WHERE name IS NOT NULL
-              AND (highway IN ('trunk', 'primary') OR
-                   highway IN ('secondary'))
-        ) AS streets
-        
-        WHERE streets.way && masks.way
+        AS
+        SELECT osm_id, name,
+               (CASE WHEN highway IN ('motorway') THEN 'highway'
+                     WHEN highway IN ('trunk', 'primary') THEN 'major_road'
+                     ELSE 'minor_road' END) AS kind
+
+        FROM %s
+        WHERE name IS NOT NULL
         ''' % opts.table)
     
     logging.debug('Indexing street names...')
     
     db.execute('CREATE INDEX street_names ON street_ids(name)')
+    
+    # make it possible to rollback to this point in the event of an error
+    db.execute('COMMIT')
     
     db.execute('SELECT COUNT(osm_id), COUNT(distinct name) FROM street_ids')
     streets_count, names_count = db.fetchone()
@@ -102,31 +118,64 @@ def get_street_multilines(db, opts, low_street, high_street):
     '''
     '''
     if high_street is None:
-        db.execute('''
-            SELECT streets.name, street_ids.kind, streets.highway,
-                   AsBinary(Transform(Collect(streets.way), 4326)) AS way_wkb
-            
-            FROM %s AS streets, street_ids
-            
-            WHERE streets.osm_id = street_ids.osm_id
-              AND street_ids.name >= %%s
-            GROUP BY streets.name, street_ids.kind, streets.highway
-            ORDER BY streets.name''' % opts.table, (low_street, ))
+        name_test = 'i.name >= %s'
+        values = (low_street, )
 
     else:
-        db.execute('''
-            SELECT streets.name, street_ids.kind, streets.highway,
-                   AsBinary(Transform(Collect(streets.way), 4326)) AS way_wkb
-            
-            FROM %s AS streets, street_ids
-            
-            WHERE streets.osm_id = street_ids.osm_id
-              AND street_ids.name >= %%s AND street_ids.name < %%s
-            GROUP BY streets.name, street_ids.kind, streets.highway
-            ORDER BY streets.name''' % opts.table, (low_street, high_street))
+        name_test = 'i.name >= %s AND i.name < %s'
+        values = (low_street, high_street)
 
-    return [(name, kind, highway, loads(bytes(way_wkb)))
-            for (name, kind, highway, way_wkb) in db.fetchall()]
+    table = opts.table
+    
+    try:
+        #
+        # Try to let Postgres do the grouping for us, it's faster.
+        #
+        db.execute('''
+            SELECT s.name, i.kind, s.highway,
+                   AsBinary(Transform(Collect(s.way), 4326)) AS way_wkb
+            
+            FROM %(table)s AS s, street_ids AS i
+            
+            WHERE s.osm_id = i.osm_id AND %(name_test)s
+            GROUP BY s.name, i.kind, s.highway
+            ORDER BY s.name''' % locals(), values)
+    
+        multilines = [(name, kind, highway, loads(bytes(way_wkb)))
+                      for (name, kind, highway, way_wkb) in db.fetchall()]
+
+    except OperationalError, err:
+        #
+        # Known to happen: "array size exceeds the maximum allowed (1073741823)"
+        # Try again, but this time we'll need to do our own grouping.
+        #
+        logging.debug('Rolling back and doing our own grouping: %s' % err)
+    
+        db.execute('ROLLBACK')
+
+        db.execute('''
+            SELECT s.name, i.kind, s.highway,
+                   AsBinary(Transform(s.way, 4326)) AS way_wkb
+            
+            FROM %(table)s AS s, street_ids AS i
+            
+            WHERE s.osm_id = i.osm_id AND %(name_test)s
+            ORDER BY s.name, i.kind, s.highway''' % locals(), values)
+        
+        logging.debug('...executed...')
+        
+        groups = groupby(db.fetchall(), lambda (n, k, h, w): (n, k, h))
+        multilines = []
+        
+        logging.debug('...fetched...')
+        
+        for ((name, kind, highway), group) in groups:
+            lines = [loads(bytes(way_wkb)) for (n, k, h, way_wkb) in group]
+            multilines.append((name, kind, highway, MultiLineString(lines)))
+    
+        logging.debug('...collected.')
+        
+    return multilines
 
 def output_geojson_bzipped(index, streets):
     '''
