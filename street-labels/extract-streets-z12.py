@@ -57,18 +57,20 @@ def build_temporary_tables(db, opts):
     db.execute('''
         CREATE TEMPORARY TABLE street_ids
         AS
-        SELECT osm_id, name,
-               (CASE WHEN highway IN ('motorway') THEN 'highway'
-                     WHEN highway IN ('trunk', 'primary') THEN 'major_road'
-                     ELSE 'minor_road' END) AS kind
-
+        SELECT osm_id, name, highway, way
         FROM %s
         WHERE name IS NOT NULL
+          AND highway IN ('trunk', 'trunk_link', 'primary', 'primary_link',
+                          'secondary', 'secondary_link', 'tertiary', 'tertiary_link')
         ''' % opts.table)
     
     logging.debug('Indexing street names...')
     
     db.execute('CREATE INDEX street_names ON street_ids(name)')
+
+    logging.debug('Clustering street names...')
+    
+    db.execute('CLUSTER street_ids USING street_names')
     
     # make it possible to rollback to this point in the event of an error
     db.execute('COMMIT')
@@ -118,11 +120,11 @@ def get_street_multilines(db, opts, low_street, high_street):
     '''
     '''
     if high_street is None:
-        name_test = 'i.name >= %s'
+        name_test = 'name >= %s'
         values = (low_street, )
 
     else:
-        name_test = 'i.name >= %s AND i.name < %s'
+        name_test = 'name >= %s AND name < %s'
         values = (low_street, high_street)
 
     table = opts.table
@@ -132,14 +134,14 @@ def get_street_multilines(db, opts, low_street, high_street):
         # Try to let Postgres do the grouping for us, it's faster.
         #
         db.execute('''
-            SELECT s.name, i.kind, s.highway,
-                   AsBinary(Transform(Collect(s.way), 4326)) AS way_wkb
+            SELECT name, 'none' as kind, highway,
+                   AsBinary(Transform(Collect(way), 4326)) AS way_wkb
             
-            FROM %(table)s AS s, street_ids AS i
+            FROM street_ids
             
-            WHERE s.osm_id = i.osm_id AND %(name_test)s
-            GROUP BY s.name, i.kind, s.highway
-            ORDER BY s.name''' % locals(), values)
+            WHERE %(name_test)s
+            GROUP BY name, highway
+            ORDER BY name''' % locals(), values)
     
         multilines = [(name, kind, highway, loads(bytes(way_wkb)))
                       for (name, kind, highway, way_wkb) in db.fetchall()]
@@ -154,13 +156,13 @@ def get_street_multilines(db, opts, low_street, high_street):
         db.execute('ROLLBACK')
 
         db.execute('''
-            SELECT s.name, i.kind, s.highway,
-                   AsBinary(Transform(s.way, 4326)) AS way_wkb
+            SELECT name, 'none' as kind, highway,
+                   AsBinary(Transform(way, 4326)) AS way_wkb
             
-            FROM %(table)s AS s, street_ids AS i
+            FROM street_ids
             
-            WHERE s.osm_id = i.osm_id AND %(name_test)s
-            ORDER BY s.name, i.kind, s.highway''' % locals(), values)
+            WHERE %(name_test)s
+            ORDER BY name, highway''' % locals(), values)
         
         logging.debug('...executed...')
         
