@@ -1,15 +1,19 @@
-from json import dump
 from time import time
 from uuid import uuid1
 from bz2 import BZ2File
 from itertools import count, izip, groupby
 from optparse import OptionParser
 from multiprocessing import Pool
+from json import JSONEncoder
+from re import compile
 
 import logging
 
 from psycopg2 import connect
 from shapely.wkb import loads
+
+float_pat = compile(r'^-?\d+\.\d+(e-?\d+)?$')
+charfloat_pat = compile(r'^[\[,\,]-?\d+\.\d+(e-?\d+)?$')
 
 def get_relations_list(db, opts):
     '''
@@ -18,7 +22,6 @@ def get_relations_list(db, opts):
                   FROM %s_rels
                   WHERE 'network' = ANY(tags)
                     AND 'ref' = ANY(tags)
-                    AND 'US:CT' = ANY(tags)
                   ''' % opts.table_prefix)
     
     relations = []
@@ -180,8 +183,23 @@ def output_geojson_bzipped(index, routes):
                     for (id, p, g) in zip(ids, properties, geometries)]
         
         geojson = dict(type='FeatureCollection', features=features)
+        encoder = JSONEncoder(separators=(',', ':'))
+        encoded = encoder.iterencode(geojson)
+
         output = BZ2File('routes-%06d.json.bz2' % index, 'w')
-        dump(geojson, output)
+        
+        for token in encoded:
+            if charfloat_pat.match(token):
+                # in python 2.7, we see a character followed by a float literal
+                output.write(token[0] + '%.6f' % float(token[1:]))
+            
+            elif float_pat.match(token):
+                # in python 2.6, we see a simple float literal
+                output.write('%.6f' % float(token))
+            
+            else:
+                output.write(token)        
+
         output.close()
     
     except Exception, e:
