@@ -15,10 +15,11 @@ def get_relations_list(db, opts):
     '''
     '''
     db.execute('''SELECT id, tags
-                  FROM %s
+                  FROM %s_rels
                   WHERE 'network' = ANY(tags)
                     AND 'ref' = ANY(tags)
-                  ''' % opts.table)
+                    AND 'US:CT' = ANY(tags)
+                  ''' % opts.table_prefix)
     
     relations = []
     
@@ -88,7 +89,7 @@ def relation_key((id, tags)):
     '''
     return (tags.get('network', ''), tags.get('ref', ''), tags.get('modifier', ''))
 
-def get_relation_ways(db, rel_id):
+def get_relation_ways(db, opts, rel_id):
     '''
     '''
     rel_ids = [rel_id]
@@ -104,9 +105,9 @@ def get_relation_ways(db, rel_id):
         rels_seen.add(rel_id)
         
         db.execute('''SELECT members
-                      FROM planet_osm_rels
+                      FROM %s_rels
                       WHERE id = %d''' \
-                    % rel_id)
+                    % (opts.table_prefix, rel_id))
         
         try:
             (members, ) = db.fetchone()
@@ -127,53 +128,19 @@ def get_relation_ways(db, rel_id):
     
     return way_ids
 
-def get_way_linestring(db, way_id):
+def get_way_linestring(db, opts, way_id):
     '''
     '''
     db.execute('''SELECT AsBinary(Transform(way, 4326))
-                  FROM planet_osm_line
-                  WHERE osm_id = %s''', (way_id, ))
+                  FROM %s_line
+                  WHERE osm_id = %%s''' % opts.table_prefix, (way_id, ))
     
-    if db.rowcount:
-        return loads(bytes(db.fetchone()[0]))
-
-    else:
+    if db.rowcount == 0:
         return None
-    
-    db.execute('SELECT SRID(way) FROM planet_osm_point LIMIT 1')
-    
-    (srid, ) = db.fetchone()
-    
-    if srid not in (4326, 900913):
-        raise Exception('Unknown SRID %d' % srid)
-    
-    db.execute('''SELECT X(location) AS lon, Y(location) AS lat
-                  FROM (
-                    SELECT
-                      CASE
-                      WHEN %s = 900913
-                      THEN Transform(SetSRID(MakePoint(n.lon * 0.01, n.lat * 0.01), 900913), 4326)
-                      WHEN %s = 4326
-                      THEN MakePoint(n.lon * 0.0000001, n.lat * 0.0000001)
-                      END AS location
-                    FROM (
-                      SELECT unnest(nodes)::int AS id
-                      FROM planet_osm_ways
-                      WHERE id = %d
-                    ) AS w,
-                    planet_osm_nodes AS n
-                    WHERE n.id = w.id
-                  ) AS points''' \
-                % (srid, srid, way_id))
-    
-    coords = db.fetchall()
-    
-    if len(coords) < 2:
-        return None
-    
-    return LineString(coords)
 
-def gen_relation_groups(db, relations):
+    return loads(bytes(db.fetchone()[0]))
+
+def gen_relation_groups(db, opts, relations):
     '''
     '''
     relations.sort(key=relation_key)
@@ -185,8 +152,8 @@ def gen_relation_groups(db, relations):
         rel_coords, way_lines = 0, []
         
         for (id, tags) in _relations:
-            way_ids = get_relation_ways(db, id)
-            way_lines += [get_way_linestring(db, way_id) for way_id in way_ids]
+            way_ids = get_relation_ways(db, opts, id)
+            way_lines += [get_way_linestring(db, opts, way_id) for way_id in way_ids]
             rel_coords += sum([len(line.coords) for line in way_lines if line])
 
         logging.debug('%s -- %d nodes' % (', '.join(key), rel_coords))
@@ -224,7 +191,7 @@ def output_geojson_bzipped(index, routes):
 
 optparser = OptionParser(usage="""%prog [options] <database>""")
 
-defaults = dict(host='localhost', user='gis', passwd=None, table='planet_osm_rels', count=5000, loglevel=logging.INFO)
+defaults = dict(host='localhost', user='gis', passwd=None, table_prefix='planet_osm', count=5000, loglevel=logging.INFO)
 
 optparser.set_defaults(**defaults)
 
@@ -237,8 +204,8 @@ optparser.add_option('-u', '--user', dest='user',
 optparser.add_option('-p', '--passwd', dest='passwd',
                      help='Postgres password, default "%(passwd)s".' % defaults)
 
-optparser.add_option('-t', '--table', dest='table',
-                     help='Osm2psql relations table name, default "%(table)s".' % defaults)
+optparser.add_option('-t', '--table-prefix', dest='table_prefix',
+                     help='Osm2psql table name prefix, default "%(table_prefix)s".' % defaults)
 
 optparser.add_option('-v', '--verbose', dest='loglevel',
                      action='store_const', const=logging.DEBUG,
@@ -261,7 +228,7 @@ if __name__ == '__main__':
     # Build temporary table with relation IDs
     #
     relations = get_relations_list(db, opts)
-    route_groups = gen_relation_groups(db, relations)
+    route_groups = gen_relation_groups(db, opts, relations)
     pool = Pool(6)
     
     for (routes, index) in izip(route_groups, count(1)):
