@@ -1,7 +1,6 @@
 #!/bin/sh
 
 cd `dirname $0`
-PATH="$PATH:/usr/local/bin"
 
 find . -maxdepth 1 -name 'routes-*.json.bz2' -delete
 

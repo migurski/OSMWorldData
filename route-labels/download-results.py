@@ -49,7 +49,10 @@ def ogr2ogr_callback((index, file, table, result)):
     else:
         logging.info('%(index)d. Failed: %(result)s' % locals())
 
-optparser = OptionParser(usage="""%prog [options] <aws key> <aws secret> <s3 bucket/path> <db name> <db table>""")
+optparser = OptionParser(usage="""%prog [options] <s3 bucket/path> <db name> <db table>
+
+Amazon S3 connection info is expected in ~/.boto, see:
+    http://code.google.com/p/boto/wiki/BotoConfig""")
 
 defaults = dict(host='localhost', user='gis', passwd=None, table='routes_altogether', loglevel=logging.INFO)
 
@@ -77,13 +80,13 @@ optparser.add_option('-q', '--quiet', dest='loglevel',
 
 if __name__ == '__main__':
 
-    opts, (aws_key, aws_secret, aws_path, db_name, db_table) = optparser.parse_args()
+    opts, (aws_path, db_name, db_table) = optparser.parse_args()
     
     aws_bucket, aws_prefix = aws_path.split(sep, 1)
     
     logging.basicConfig(level=logging.INFO, format='%(levelname)08s - %(message)s')
     
-    s3 = connect_s3(aws_key, aws_secret).get_bucket(aws_bucket)
+    s3 = connect_s3().get_bucket(aws_bucket)
     
     dbinfo = "PG:dbname='%s' host='%s' user='%s' password='%s'" % (db_name, opts.host, opts.user, opts.passwd)
     
