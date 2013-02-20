@@ -90,38 +90,37 @@ if __name__ == '__main__':
     
     dbinfo = "PG:dbname='%s' host='%s' user='%s' password='%s'" % (db_name, opts.host, opts.user, opts.passwd)
     
-    #    tables = []
-    #    pool = Pool()
-    #    
-    #    for (key, index) in zip(s3.list(aws_prefix), count(1)):
-    #        name = key.name
-    #
-    #        if not name.endswith('.bz2'):
-    #            logging.debug('%(index)d. Skipping %(name)s' % locals())
-    #            continue
-    #    
-    #        logging.info('%(index)d. Getting %(name)s' % locals())
-    #        
-    #        buffer = StringIO()
-    #        key.get_contents_to_file(buffer)
-    #        raw = decompress(buffer.getvalue())
-    #        
-    #        base, ext = splitext(basename(name))
-    #        handle, file = mkstemp(dir='.', suffix='.json')
-    #        close(handle)
-    #        
-    #        with open(file, 'w') as json:
-    #            json.write(raw)
-    #            json.close()
-    #        
-    #        table = 'streets_' + base.replace('-', '_').replace('.', '_')
-    #        tables.append(table)
-    #        
-    #        pool.apply_async(ogr2ogr, (dbinfo, index, table, file), callback=ogr2ogr_callback)
-    #    
-    #    pool.close()
-    #    pool.join()
-    tables = 'streets_part_00000', 'streets_part_00001', 'streets_part_00002', 'streets_part_00003', 'streets_part_00004', 'streets_part_00005', 'streets_part_00006', 'streets_part_00007', 'streets_part_00008', 'streets_part_00009', 'streets_part_00010', 'streets_part_00011', 'streets_part_00012', 'streets_part_00013', 'streets_part_00014', 'streets_part_00015', 'streets_part_00016', 'streets_part_00017', 'streets_part_00018', 'streets_part_00019', 'streets_part_00020', 'streets_part_00021', 'streets_part_00022', 'streets_part_00023'
+    tables = []
+    pool = Pool()
+    
+    for (key, index) in zip(s3.list(aws_prefix), count(1)):
+        name = key.name
+
+        if not name.endswith('.bz2'):
+            logging.debug('%(index)d. Skipping %(name)s' % locals())
+            continue
+    
+        logging.info('%(index)d. Getting %(name)s' % locals())
+        
+        buffer = StringIO()
+        key.get_contents_to_file(buffer)
+        raw = decompress(buffer.getvalue())
+        
+        base, ext = splitext(basename(name))
+        handle, file = mkstemp(dir='.', suffix='.json')
+        close(handle)
+        
+        with open(file, 'w') as json:
+            json.write(raw)
+            json.close()
+        
+        table = 'streets_' + base.replace('-', '_').replace('.', '_')
+        tables.append(table)
+        
+        pool.apply_async(ogr2ogr, (dbinfo, index, table, file), callback=ogr2ogr_callback)
+    
+    pool.close()
+    pool.join()
     
     #
     #
