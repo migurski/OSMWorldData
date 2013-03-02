@@ -49,7 +49,7 @@ def ogr2ogr_callback((index, file, table, result)):
     else:
         logging.info('%(index)d. Failed: %(result)s' % locals())
 
-optparser = OptionParser(usage="""%prog [options] <s3 bucket/path> <db name> <db table>
+optparser = OptionParser(usage="""%prog [options] <s3 bucket/path> <db name>
 
 Amazon S3 connection info is expected in ~/.boto, see:
     http://code.google.com/p/boto/wiki/BotoConfig""")
@@ -80,7 +80,7 @@ optparser.add_option('-q', '--quiet', dest='loglevel',
 
 if __name__ == '__main__':
 
-    opts, (aws_path, db_name, db_table) = optparser.parse_args()
+    opts, (aws_path, db_name) = optparser.parse_args()
     
     aws_bucket, aws_prefix = aws_path.split(sep, 1)
     
@@ -147,7 +147,7 @@ if __name__ == '__main__':
                       pixelwidth INT
                   )''' % locals())
     
-    db.execute("SELECT AddGeometryColumn('%(dest_table)s', 'way', %(srid)d, 'MULTILINESTRING', 2)" % locals())
+    db.execute("SELECT AddGeometryColumn('%(dest_table)s', 'way', %(srid)d, 'LINESTRING', 2)" % locals())
     
     for tmp_table in tables:
         logging.debug('Inserting from %(tmp_table)s to %(dest_table)s' % locals())
@@ -161,9 +161,9 @@ if __name__ == '__main__':
     logging.info('Indexing table %(dest_table)s' % locals())
 
     # Geohash idea from http://workshops.opengeo.org/postgis-intro/clusterindex.html
-    db.execute('CREATE INDEX %(dest_table)s_geohash ON routes_altogether (ST_Geohash(Transform(way, 4326)))' % locals())
-    db.execute('CREATE INDEX %(dest_table)s_networks ON routes_altogether (network)' % locals())
-    db.execute('CLUSTER %(dest_table)s USING routes_altogether_geohash' % locals())
+    db.execute('CREATE INDEX %(dest_table)s_geohash ON %(dest_table)s (ST_Geohash(Transform(way, 4326)))' % locals())
+    db.execute('CREATE INDEX %(dest_table)s_networks ON %(dest_table)s (network)' % locals())
+    db.execute('CLUSTER %(dest_table)s USING %(dest_table)s_geohash' % locals())
 
     db.execute('COMMIT')
     db.close()
