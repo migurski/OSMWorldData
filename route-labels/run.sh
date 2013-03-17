@@ -12,6 +12,7 @@ python extract-routes.py -p gis gis
 
 ln -f setup.sh $DIR/
 ln -f skeletron-hadoop-mapper.py $DIR/
+ln -f process-routes.py $DIR/
 ln -f routes-*01.json.bz2 $DIR/routes-geojson-100th/
 mv routes-*.json.bz2 $DIR/routes-geojson/
 
