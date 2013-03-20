@@ -1,8 +1,11 @@
 from boto import connect_s3, connect_ec2
+from boto.ec2 import regions
 
 itype = 'c1.xlarge'
-ami = 'ami-b6089bdf'
-ec2 = connect_ec2()
+ami = 'ami-38d94c08' # Ubuntu 12.04 LTS Precise instance-store in us-west-2
+region = [region for region in regions() if region.name == 'us-west-2'][0]
+ec2 = connect_ec2(region=region)
+count = 2
 
 # bid a half-penny over median
 history = ec2.get_spot_price_history(instance_type=itype)
@@ -13,8 +16,8 @@ bid = median + .005
 #
 #
 
-bucket = 'osm-hadoop-data'
-directory = '2013-03-11-routes'
+bucket = 'osm-streets-routes-data'
+directory = '2013-03-19-routes'
 key_name = 'whiteknight-id_rsa.pub'
 access_key = ec2.access_key
 secret_key = ec2.secret_key
@@ -56,18 +59,20 @@ python process-routes.py %(bucket)s %(prefix)s 12 13 14 15
 
 python <<KILL
 
+from boto.ec2 import regions
 from boto import connect_ec2
 
 instance = open('instance-id').read().strip()
-connect_ec2().terminate_instances(instance)
+region = [region for region in regions() if region.name == 'us-west-2'][0]
+connect_ec2(region=region).terminate_instances(instance)
 
 KILL
 '''
 
-for prefix in sorted(prefixes):
+kwargs = dict(count=count, instance_type=itype, key_name=key_name)
 
-    user_data = ud_template % locals()
+for prefix in sorted(prefixes):
+    print 'bidding', bid, 'on', count, itype, 'for', '/'.join((bucket, prefix))
     
-    print 'bidding', bid, 'on', itype, 'for', '/'.join((bucket, prefix))
-    
-    # ec2.request_spot_instances(bid, ami, count=2, instance_type=itype, user_data=user_data, key_name=key_name)
+    kwargs.update(dict(user_data=ud_template % locals()))
+    ec2.request_spot_instances(bid, ami, **kwargs)
