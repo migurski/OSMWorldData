@@ -18,4 +18,4 @@ mv routes-*.json.bz2 $DIR/routes-geojson/
 
 curl -sL https://raw.github.com/migurski/Skeletron/master/skeletron-hadoop-reducer.py -o $DIR/skeletron-hadoop-reducer.py
 
-s3put -b osm-hadoop-data -g public-read -p `pwd` $DIR
+s3put -b osm-streets-routes-data -g public-read -p `pwd` $DIR
