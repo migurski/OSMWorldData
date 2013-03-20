@@ -32,6 +32,9 @@ def get_relations_list(db, opts):
         if 'network' not in tags or 'ref' not in tags:
             continue
         
+        if 'modifier' not in tags:
+            tags['modifier'] = ''
+        
         network = tags.get('network', '')
         route = tags.get('route', tags.get('type', ''))
         
