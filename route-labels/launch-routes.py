@@ -17,7 +17,7 @@ bid = median + .005
 #
 
 bucket = 'osm-streets-routes-data'
-directory = '2013-03-19-routes'
+directory = '2013-04-01-routes'
 key_name = 'whiteknight-id_rsa.pub'
 access_key = ec2.access_key
 secret_key = ec2.secret_key
