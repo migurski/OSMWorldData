@@ -203,4 +203,22 @@ if __name__ == '__main__':
     db.execute("DELETE FROM geometry_columns WHERE f_table_name = '%(dest_table)s'" % locals())
     db.execute("UPDATE geometry_columns SET f_table_name = '%(dest_table)s' WHERE f_table_name = '%(next_table)s'" % locals())
     db.execute('COMMIT')
+    
+    #
+    #
+    #
+    
+    logging.info('Dumping %(dest_table)s to routes.json.bz2' % locals())
 
+    cmd = 'ogr2ogr -t_srs EPSG:4326 -lco ENCODING=UTF-8 -lco COORDINATE_PRECISION=6 -f GeoJSON /vsistdout <db> <table>'.split()
+    cmd[-2:] = "PG:dbname='%s' host='%s' user='%s' password='%s'" % (db_name, opts.host, opts.user, opts.passwd), opts.table
+    
+    ogr2ogr = Popen(cmd, stdout=PIPE)
+    file = open('routes.json.bz2', 'w')
+    bz = Popen(['bzip2', '-v'], stdin=ogr2ogr.stdout, stderr=PIPE, stdout=file)
+    
+    ogr2ogr.wait()
+    bz.wait()
+    file.close()
+    
+    logging.info('Dumped %s' % bz.stderr.read().strip())

@@ -1,7 +1,3 @@
-ogr2ogr -t_srs EPSG:4326 \
-        -lco ENCODING=UTF-8 -lco COORDINATE_PRECISION=6 \
-        -f GeoJSON /vsistdout \
-        PG:"dbname='*' host='*' user='*' password='*'" <table name> \
-      | pv \
-      | bzip2 -v \
-      > routes.json.bz2
+0. ./run.sh
+1. python launch-routes.py
+2. python download-routes.py osm-streets-routes-data/YYYY-MM-DD-routes/output/ gis
