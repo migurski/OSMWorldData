@@ -56,7 +56,7 @@ optparser = OptionParser(usage="""%prog [options] <s3 bucket/path> <db name>
 Amazon S3 connection info is expected in ~/.boto, see:
     http://code.google.com/p/boto/wiki/BotoConfig""")
 
-defaults = dict(host='localhost', user='gis', passwd=None, table='streets_skeletron', srid=900913, jobs=None, loglevel=logging.INFO)
+defaults = dict(host='localhost', user='osm2pgsql', passwd=None, table='streets_skeletron', srid=900913, jobs=None, loglevel=logging.INFO)
 
 optparser.set_defaults(**defaults)
 

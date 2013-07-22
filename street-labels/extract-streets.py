@@ -224,7 +224,7 @@ def output_geojson_bzipped(index, streets):
 
 optparser = OptionParser(usage="""%prog [options] <database>""")
 
-defaults = dict(host='localhost', user='gis', passwd=None, table='planet_osm_line', count=5000)
+defaults = dict(host='localhost', user='osm2pgsql', passwd=None, table='planet_osm_line', count=5000)
 
 optparser.set_defaults(**defaults)
 

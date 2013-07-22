@@ -212,7 +212,7 @@ def output_geojson_bzipped(index, routes):
 
 optparser = OptionParser(usage="""%prog [options] <database>""")
 
-defaults = dict(host='localhost', user='gis', passwd=None, table_prefix='planet_osm', count=5000, loglevel=logging.INFO)
+defaults = dict(host='localhost', user='osm2pgsql', passwd=None, table_prefix='planet_osm', count=5000, loglevel=logging.INFO)
 
 optparser.set_defaults(**defaults)
 

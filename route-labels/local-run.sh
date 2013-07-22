@@ -8,7 +8,7 @@ DIR=`date +%Y-%m-%d`-routes
 mkdir -p $DIR/routes-geojson
 mkdir -p $DIR/routes-geojson-100th
 
-python extract-routes.py -p gis gis
+python extract-routes.py -u osm2pgsql -p osm2pgsqlpassword osm2pgsql
 
 ln -f setup.sh $DIR/
 ln -f process-routes.py $DIR/

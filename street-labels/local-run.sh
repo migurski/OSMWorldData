@@ -8,7 +8,7 @@ DIR=`date +%Y-%m-%d`-streets
 mkdir -p $DIR/streets-geojson
 mkdir -p $DIR/streets-geojson-100th
 
-python extract-streets.py -p gis gis
+python extract-streets.py -u osm2pgsql -p osm2pgsqlpassword osm2pgsql
 
 ln -f setup.sh $DIR/
 ln -f process-streets.py $DIR/
