@@ -73,7 +73,12 @@ def cascaded_union(shapes):
     
     if len(shapes) == 2:
         if shapes[0] and shapes[1]:
-            return shapes[0].union(shapes[1])
+            try:
+                return shapes[0].union(shapes[1])
+            except Exception, e:
+                logging.error(str(e))
+
+                return None
         
         if shapes[0] is None:
             return shapes[1]
