@@ -20,9 +20,16 @@ def ogr2ogr(dbinfo, index, table, file):
     '''
     '''
     try:
+        #
+        # PG_LIST_ALL_TABLES config option added, after reading FAQ and guessing:
+        # Misleading behavior may follow without an error message ... can be
+        # generally confirmed if you can see the tables by setting the configuration
+        # option PG_LIST_ALL_TABLES to YES. (http://www.gdal.org/ogr/drv_pg.html)
+        #
         cmd = '''ogr2ogr -t_srs <mercator> -nln <table> -overwrite
                          -lco ENCODING=UTF-8 -lco GEOMETRY_NAME=way -nlt GEOMETRY
                          -select highway,name,long_name,zoomlevel,pixelwidth
+                         --config PG_LIST_ALL_TABLES YES
                          -f PostgreSQL <pgconnect> <file>'''.split()
     
         cmd[2], cmd[4], cmd[-2], cmd[-1] = mercator, table, dbinfo, file
@@ -195,7 +202,8 @@ if __name__ == '__main__':
     
     logging.info('Dumping %(dest_table)s to streets.json.bz2' % locals())
 
-    cmd = 'ogr2ogr -t_srs EPSG:4326 -lco ENCODING=UTF-8 -lco COORDINATE_PRECISION=6 -f GeoJSON /vsistdout <db> <table>'.split()
+    # PG_LIST_ALL_TABLES config as described above.
+    cmd = 'ogr2ogr -t_srs EPSG:4326 -lco ENCODING=UTF-8 -lco COORDINATE_PRECISION=6 -f GeoJSON /vsistdout --config PG_LIST_ALL_TABLES YES <db> <table>'.split()
     cmd[-2:] = "PG:dbname='%s' host='%s' user='%s' password='%s'" % (db_name, opts.host, opts.user, opts.passwd), opts.table
     
     ogr2ogr = Popen(cmd, stdout=PIPE)
