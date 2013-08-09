@@ -219,7 +219,7 @@ if __name__ == '__main__':
 
     # PG_LIST_ALL_TABLES config as described above.
     cmd = 'ogr2ogr -s_srs <mercator> -t_srs EPSG:4326 -lco ENCODING=UTF-8 -lco COORDINATE_PRECISION=6 -f GeoJSON /vsistdout --config PG_LIST_ALL_TABLES YES <db> <table>'.split()
-    cmd[2], cmd[-2:] = mercator, "PG:dbname='%s' host='%s' user='%s' password='%s'" % (db_name, opts.host, opts.user, opts.passwd), opts.table
+    cmd[2], cmd[-2], cmd[-1] = mercator, "PG:dbname='%s' host='%s' user='%s' password='%s'" % (db_name, opts.host, opts.user, opts.passwd), opts.table
     
     ogr2ogr = Popen(cmd, stdout=PIPE)
     file = open('routes.json.bz2', 'w')
